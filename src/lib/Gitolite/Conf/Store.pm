@@ -113,6 +113,8 @@ sub parse_users {
 
 sub add_rule {
     my ( $perm, $ref, $user ) = @_;
+    _warn "possible undeclared group '$user'"
+        if $user =~ /^@/ and not $groups{$user} and not $rc{GROUPLIST_PGM};
     _die "bad ref '$ref'"   unless $ref  =~ $REPOPATT_PATT;
     _die "bad user '$user'" unless $user =~ $USERNAME_PATT;
 
