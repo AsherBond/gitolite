@@ -12,8 +12,8 @@ package Gitolite::Conf;
 use Exporter 'import';
 use Getopt::Long;
 
-use Gitolite::Common;
 use Gitolite::Rc;
+use Gitolite::Common;
 use Gitolite::Conf::Sugar;
 use Gitolite::Conf::Store;
 
@@ -42,7 +42,7 @@ sub compile {
 
 sub parse {
     my $lines = shift;
-    trace( 2, scalar(@$lines) . " lines incoming" );
+    trace( 3, scalar(@$lines) . " lines incoming" );
 
     for my $line (@$lines) {
         # user or repo groups
@@ -65,12 +65,12 @@ sub parse {
             $value =~ s/^['"](.*)["']$/$1/;
             my @validkeys = split( ' ', ( $rc{GIT_CONFIG_KEYS} || '' ) );
             push @validkeys, "gitolite-options\\..*";
-            my @matched = grep { $key =~ /^$_$/ } @validkeys;
+            my @matched = grep { $key =~ /^$_$/i } @validkeys;
             _die "git config '$key' not allowed\ncheck GIT_CONFIG_KEYS in the rc file" if ( @matched < 1 );
-            _die "bad value '$value'" if $value =~ $UNSAFE_PATT;
+            _die "bad config value '$value'" if $value =~ $UNSAFE_PATT;
             add_config( 1, $key, $value );
         } elsif ( $line =~ /^subconf (\S+)$/ ) {
-            trace( 2, $line );
+            trace( 3, $line );
             set_subconf($1);
         } else {
             _warn "syntax error, ignoring: '$line'";

@@ -21,8 +21,8 @@ package Gitolite::Conf::Load;
 use Exporter 'import';
 use Cwd;
 
-use Gitolite::Common;
 use Gitolite::Rc;
+use Gitolite::Common;
 
 use strict;
 use warnings;
@@ -70,6 +70,7 @@ my $last_repo = '';
 
 sub access {
     my ( $repo, $user, $aa, $ref ) = @_;
+    trace( 2, $repo, $user, $aa, $ref );
     _die "invalid user '$user'" if not( $user and $user =~ $USERNAME_PATT );
     sanity($repo);
 
@@ -84,8 +85,8 @@ sub access {
     _die "invalid characters in ref or filename: '$ref'\n" unless $ref =~ m(^VREF/NAME/) or $ref =~ $REF_OR_FILENAME_PATT;
     # apparently we can't always force sanity; at least what we *return*
     # should be sane/safe.  This pattern is based on REF_OR_FILENAME_PATT.
-    (my $safe_ref = $ref) =~ s([^-0-9a-zA-Z._\@/+ :,])(.)g;
-    trace( 2, "safe_ref $safe_ref created from $ref") if $ref ne $safe_ref;
+    ( my $safe_ref = $ref ) =~ s([^-0-9a-zA-Z._\@/+ :,])(.)g;
+    trace( 3, "safe_ref", $safe_ref ) if $ref ne $safe_ref;
 
     # when a real repo doesn't exist, ^C is a pre-requisite for any other
     # check to give valid results.
@@ -100,7 +101,7 @@ sub access {
         return "$aa $safe_ref $repo $user DENIED by existence";
     }
 
-    trace( 2, scalar(@rules) . " rules found" );
+    trace( 3, scalar(@rules) . " rules found" );
     for my $r (@rules) {
         my $perm = $r->[1];
         my $refex = $r->[2]; $refex =~ s(/USER/)(/$user/);
@@ -130,7 +131,7 @@ sub git_config {
     my ( $repo, $key, $empty_values_OK ) = @_;
     $key ||= '.';
 
-    if (repo_missing($repo)) {
+    if ( repo_missing($repo) ) {
         load_common();
     } else {
         load($repo);
@@ -168,36 +169,36 @@ sub git_config {
     # now some of these will have an empty key; we need to delete them unless
     # we're told empty values are OK
     unless ($empty_values_OK) {
-        my($k, $v);
-        while (($k, $v) = each %ret) {
+        my ( $k, $v );
+        while ( ( $k, $v ) = each %ret ) {
             delete $ret{$k} if not $v;
         }
     }
 
-    my($k, $v);
+    my ( $k, $v );
     my $creator = creator($repo);
-    while (($k, $v) = each %ret) {
+    while ( ( $k, $v ) = each %ret ) {
         $v =~ s/%GL_REPO/$repo/g;
         $v =~ s/%GL_CREATOR/$creator/g if $creator;
         $ret{$k} = $v;
     }
 
-    trace( 3, map { ( "$_" => "-> $ret{$_}" ) } ( sort keys %ret ) );
+    map { trace( 3, "$_", "$ret{$_}" ) } ( sort keys %ret ) if $ENV{D};
     return \%ret;
 }
 
 sub env_options {
     return unless -f "$rc{GL_ADMIN_BASE}/conf/gitolite.conf-compiled.pm";
-        # prevent catch-22 during initial install
+    # prevent catch-22 during initial install
 
     my $cwd = getcwd();
 
     my $repo = shift;
     map { delete $ENV{$_} } grep { /^GL_OPTION_/ } keys %ENV;
     my $h = git_config( $repo, '^gitolite-options.ENV\.' );
-    while (my ($k, $v) = each %$h) {
+    while ( my ( $k, $v ) = each %$h ) {
         next unless $k =~ /^gitolite-options.ENV\.(\w+)$/;
-        $ENV{"GL_OPTION_" . $1} = $v;
+        $ENV{ "GL_OPTION_" . $1 } = $v;
     }
 
     chdir($cwd);
@@ -289,7 +290,7 @@ sub load_1 {
 
     sub rules {
         my ( $repo, $user ) = @_;
-        trace( 3, "repo=$repo, user=$user" );
+        trace( 3, $repo, $user );
 
         return @cached if ( $lastrepo eq $repo and $lastuser eq $user and @cached );
 
@@ -583,7 +584,7 @@ sub list_memberships {
     load_common();
     my @m;
 
-    if ($user and $repo) {
+    if ( $user and $repo ) {
         # unsupported/undocumented except via "in_role()" in Easy.pm
         @m = memberships( 'user', $user, $repo );
     } elsif ($user) {
@@ -593,7 +594,7 @@ sub list_memberships {
     }
 
     @m = grep { $_ ne '@all' and $_ ne ( $user || $repo ) } @m;
-    return ( sort_u(\@m) );
+    return ( sort_u( \@m ) );
 }
 
 =for list_members
