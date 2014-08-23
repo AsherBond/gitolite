@@ -10,7 +10,6 @@ package Gitolite::Conf;
 );
 
 use Exporter 'import';
-use Getopt::Long;
 
 use Gitolite::Rc;
 use Gitolite::Common;
@@ -33,7 +32,20 @@ sub compile {
     # the order matters; new repos should be created first, to give store a
     # place to put the individual gl-conf files
     new_repos();
+
+    # cache control
+    if ($rc{CACHE}) {
+        require Gitolite::Cache;
+        Gitolite::Cache->import(qw(cache_control));
+
+        cache_control('stop');
+    }
+
     store();
+
+    if ($rc{CACHE}) {
+        cache_control('start');
+    }
 
     for my $repo ( @{ $rc{NEW_REPOS_CREATED} } ) {
         trigger( 'POST_CREATE', $repo );
@@ -44,7 +56,9 @@ sub parse {
     my $lines = shift;
     trace( 3, scalar(@$lines) . " lines incoming" );
 
+    my ( $fname, $lnum );
     for my $line (@$lines) {
+        ( $fname, $lnum ) = ( $1, $2 ), next if $line =~ /^# (\S+) (\d+)$/;
         # user or repo groups
         if ( $line =~ /^(@\S+) = (.*)/ ) {
             add_to_group( $1, split( ' ', $2 ) );
@@ -57,7 +71,7 @@ sub parse {
 
             for my $ref (@refs) {
                 for my $user (@users) {
-                    add_rule( $perm, $ref, $user );
+                    add_rule( $perm, $ref, $user, $fname, $lnum );
                 }
             }
         } elsif ( $line =~ /^config (.+) = ?(.*)/ ) {
@@ -68,6 +82,9 @@ sub parse {
             my @matched = grep { $key =~ /^$_$/i } @validkeys;
             _die "git config '$key' not allowed\ncheck GIT_CONFIG_KEYS in the rc file" if ( @matched < 1 );
             _die "bad config value '$value'" if $value =~ $UNSAFE_PATT;
+            while ( my ( $mk, $mv ) = each %{ $rc{SAFE_CONFIG} } ) {
+                $value =~ s/%$mk/$mv/g;
+            }
             add_config( 1, $key, $value );
         } elsif ( $line =~ /^subconf (\S+)$/ ) {
             trace( 3, $line );

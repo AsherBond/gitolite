@@ -71,6 +71,9 @@ sub pre_git {
     # now you know the repo, get its mirroring details
     details($repo);
 
+    # print mirror status if at least one slave status file is present
+    print_status( $repo ) if not $rc{HUSH_MIRROR_STATUS} and $mode ne 'local' and glob("$rc{GL_REPO_BASE}/$repo.git/gl-slave-*.status");
+
     # we don't deal with any reads.  Note that for pre-git this check must
     # happen *after* getting details, to give mode() a chance to die on "known
     # unknown" repos (repos that are in the config, but mirror settings
@@ -189,8 +192,17 @@ sub post_git {
     }
 
     sub slaves {
-        my $ref = git_config( +shift, "^gitolite-options\\.mirror\\.slaves.*" );
-        my %out = map { $_ => 1 } map { split } values %$ref;
+        my $repo = shift;
+
+        my $ref = git_config( $repo, "^gitolite-options\\.mirror\\.slaves.*" );
+        my %out = map { $_ => 'async' } map { split } values %$ref;
+
+        $ref = git_config( $repo, "^gitolite-options\\.mirror\\.slaves\\.sync.*" );
+        map { $out{$_} = 'sync' } map { split } values %$ref;
+
+        $ref = git_config( $repo, "^gitolite-options\\.mirror\\.slaves\\.nosync.*" );
+        map { $out{$_} = 'nosync' } map { split } values %$ref;
+
         return %out;
     }
 
@@ -222,9 +234,19 @@ sub push_to_slaves {
     delete $ENV{GL_USER};    # why?  see src/commands/mirror
 
     for my $s ( sort keys %slaves ) {
-        system("gitolite mirror push $s $repo </dev/null >/dev/null 2>&1 &");
+        system("gitolite mirror push $s $repo </dev/null >/dev/null 2>&1 &") if $slaves{$s} eq 'async';
+        system("gitolite mirror push $s $repo </dev/null >/dev/null 2>&1")   if $slaves{$s} eq 'sync';
+        _warn "manual mirror push pending for '$s'"                          if $slaves{$s} eq 'nosync';
     }
 
+    $ENV{GL_USER} = $u;
+}
+
+sub print_status {
+    my $repo = shift;
+    my $u = $ENV{GL_USER};
+    delete $ENV{GL_USER};
+    system("gitolite mirror status all $repo >&2");
     $ENV{GL_USER} = $u;
 }
 

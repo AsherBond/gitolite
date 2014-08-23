@@ -8,6 +8,7 @@ package Gitolite::Rc;
   glrc
   query_rc
   version
+  greeting
   trigger
   _which
 
@@ -20,7 +21,6 @@ package Gitolite::Rc;
 );
 
 use Exporter 'import';
-use Getopt::Long;
 
 use Gitolite::Common;
 
@@ -67,7 +67,7 @@ if ( -r $rc and -s $rc ) {
 }
 if ( defined($GL_ADMINDIR) ) {
     say2 "";
-    say2 "FATAL: '$rc' seems to be for older gitolite; please see doc/g2migr.mkd\n" . "(online at http://gitolite.com/gitolite/g2migr.html)";
+    say2 "FATAL: '$rc' seems to be for older gitolite; please see\nhttp://gitolite.com/gitolite/migr.html";
 
     exit 1;
 }
@@ -185,6 +185,9 @@ sub non_core_expand {
 
         push @{ $rc{$where} }, $module;
     }
+
+    # finally, add in commands that were declared in the non-core list
+    map { /^(\S+)/; $rc{COMMANDS}{$1} = 1 } @{ $rc{COMMAND} };
 }
 
 # exported functions
@@ -268,6 +271,26 @@ sub version {
     }
     chomp($version);
     return $version;
+}
+
+sub greeting {
+    my $json = shift;
+
+    chomp( my $hn = `hostname -s 2>/dev/null || hostname` );
+    my $gv = substr( `git --version`, 12 );
+    my $gl_user = $ENV{GL_USER} || '';
+    $gl_user = " $gl_user" if $gl_user;
+
+    if ($json) {
+        $json->{GL_USER}          = $ENV{GL_USER};
+        $json->{USER}             = ( $ENV{USER} || "httpd" ) . "\@$hn";
+        $json->{gitolite_version} = version();
+        chomp( $json->{git_version} = $gv );    # this thing has a newline at the end
+        return;
+    }
+
+    # normal output
+    return "hello$gl_user, this is " . ( $ENV{USER} || "httpd" ) . "\@$hn running gitolite3 " . version() . " on git $gv\n";
 }
 
 sub trigger {
@@ -361,7 +384,8 @@ Explore:
 sub args {
     my $help = 0;
 
-    GetOptions(
+    require Getopt::Long;
+    Getopt::Long::GetOptions(
         'all|a'   => \$all,
         'nonl|n'  => \$nonl,
         'quiet|q' => \$quiet,
@@ -387,6 +411,8 @@ BEGIN {
 
     renice                  PRE_GIT         .
 
+    Kindergarten            INPUT           ::
+
     CpuTime                 INPUT           ::
     CpuTime                 POST_GIT        ::
 
@@ -394,11 +420,18 @@ BEGIN {
 
     Alias                   INPUT           ::
 
+    Motd                    INPUT           ::
+    Motd                    PRE_GIT         ::
+    Motd                    COMMAND         motd
+
     Mirroring               INPUT           ::
     Mirroring               PRE_GIT         ::
     Mirroring               POST_GIT        ::
 
     refex-expr              ACCESS_2        RefexExpr::access_2
+
+    expand-deny-messages    ACCESS_1        .
+    expand-deny-messages    ACCESS_2        .
 
     RepoUmask               PRE_GIT         ::
     RepoUmask               POST_CREATE     ::
@@ -464,6 +497,12 @@ __DATA__
 
     # comment out if you don't need all the extra detail in the logfile
     LOG_EXTRA                       =>  1,
+    # syslog options
+    # 1. leave this section as is for normal gitolite logging
+    # 2. uncomment this line to log only to syslog:
+    # LOG_DEST                      => 'syslog',
+    # 3. uncomment this line to log to syslog and the normal gitolite log:
+    # LOG_DEST                      => 'syslog,normal',
 
     # roles.  add more roles (like MANAGER, TESTER, ...) here.
     #   WARNING: if you make changes to this hash, you MUST run 'gitolite
@@ -473,15 +512,15 @@ __DATA__
         WRITERS                     =>  1,
     },
 
+    # enable caching (currently only Redis).  PLEASE RTFM BEFORE USING!!!
+    # CACHE                         =>  'Redis',
+
     # ------------------------------------------------------------------
 
     # rc variables used by various features
 
     # the 'info' command prints this as additional info, if it is set
         # SITE_INFO                 =>  'Please see http://blahblah/gitolite for more help',
-
-    # the 'desc' command uses this
-        # WRITER_CAN_UPDATE_DESC    =>  1,
 
     # the CpuTime feature uses these
         # display user, system, and elapsed times to user after each git operation
@@ -492,8 +531,8 @@ __DATA__
     # the Mirroring feature needs this
         # HOSTNAME                  =>  "foo",
 
-    # if you enabled 'Shell', you need this
-        # SHELL_USERS_LIST          =>  "$ENV{HOME}/.gitolite.shell-users",
+    # TTL for redis cache; PLEASE SEE DOCUMENTATION BEFORE UNCOMMENTING!
+        # CACHE_TTL                 =>  600,
 
     # ------------------------------------------------------------------
 
@@ -504,7 +543,7 @@ __DATA__
 
         # or you can use this, which lets you put everything in a subdirectory
         # called "local" in your gitolite-admin repo.  For a SECURITY WARNING
-        # on this, see http://gitolite.com/gitolite/cust.html#pushcode
+        # on this, see http://gitolite.com/gitolite/non-core.html#pushcode
         # LOCAL_CODE                =>  "$rc{GL_ADMIN_BASE}/local",
 
     # ------------------------------------------------------------------
@@ -526,6 +565,7 @@ __DATA__
             # 'create',
             # 'fork',
             # 'mirror',
+            # 'readme',
             # 'sskm',
             # 'D',
 
@@ -556,11 +596,19 @@ __DATA__
             # access a repo by another (possibly legacy) name
             # 'Alias',
 
-            # give some users direct shell access
-            # 'Shell',
+            # give some users direct shell access.  See documentation in
+            # sts.html for details on the following two choices.
+            # "Shell $ENV{HOME}/.gitolite.shell-users",
+            # 'Shell alice bob',
 
             # set default roles from lines like 'option default.roles-1 = ...', etc.
             # 'set-default-roles',
+
+            # show more detailed messages on deny
+            # 'expand-deny-messages',
+
+            # show a message of the day
+            # 'Motd',
 
         # system admin stuff
 
@@ -601,6 +649,10 @@ __DATA__
             # allow simple line-oriented macros
             # 'macros',
 
+        # Kindergarten mode
+
+            # disallow various things that sensible people shouldn't be doing anyway
+            # 'Kindergarten',
     ],
 
 );

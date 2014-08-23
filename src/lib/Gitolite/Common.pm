@@ -71,8 +71,11 @@ sub dd {
 }
 
 {
-    use Time::HiRes;
     my %start_times;
+
+    eval "require Time::HiRes";
+    # we just ignore any errors from this; nothing needs to be done as long as
+    # no code *calls* either of the next two functions.
 
     sub t_start {
         my $name = shift || 'default';
@@ -121,8 +124,9 @@ sub usage {
 }
 
 sub _mkdir {
-    # it's not an error if the directory exists, but it is an error if it
-    # doesn't exist and we can't create it
+    # It's not an error if the directory exists, but it is an error if it
+    # doesn't exist and we can't create it. This includes not guaranteeing
+    # dead symlinks or if mkpath traversal is blocked by a file.
     my $dir  = shift;
     my $perm = shift;    # optional
     return if -d $dir;
@@ -202,6 +206,7 @@ sub sort_u {
 
 sub cleanup_conf_line {
     my $line = shift;
+    return $line if $line =~ /^# \S+ \d+$/;
 
     # kill comments, but take care of "#" inside *simple* strings
     $line =~ s/^((".*?"|[^#"])*)#.*/$1/;
@@ -260,6 +265,9 @@ sub gen_lfn {
     return $template;
 }
 
+my $log_dest;
+my $syslog_opened = 0;
+END { closelog() if $syslog_opened; }
 sub gl_log {
     # the log filename and the timestamp come from the environment.  If we get
     # called even before they are set, we have no choice but to dump to STDERR
@@ -271,6 +279,28 @@ sub gl_log {
 
     my $ts = gen_ts();
     my $tid = $ENV{GL_TID} ||= $$;
+
+    # syslog
+    $log_dest = $Gitolite::Rc::rc{LOG_DEST} || '' if not defined $log_dest;
+    if ($log_dest =~ /syslog/) {            # log_dest *includes* syslog
+        if ($syslog_opened == 0) {
+            require Sys::Syslog;
+            Sys::Syslog->import(qw(:standard));
+
+            openlog("gitolite" . ( $ENV{GL_TID} ? "[$ENV{GL_TID}]" : "" ), "pid", "local0");
+            $syslog_opened = 1;
+        }
+
+        # gl_log is called either directly, or, if the rc variable LOG_EXTRA
+        # is set, from trace(1, ...).  The latter use is considered additional
+        # info for troubleshooting.  Trace prefixes a tab to the arguments
+        # before calling gl_log, to visually set off such lines in the log
+        # file.  Although syslog eats up that leading tab, we use it to decide
+        # the priority/level of the syslog message.
+        syslog( ( $msg =~ /^\t/ ? 'debug' : 'info' ), "%s", $msg);
+
+        return if $log_dest eq 'syslog';    # log_dest *equals* syslog
+    }
 
     my $fh;
     logger_plus_stderr( "errors found before logging could be setup", "$msg" ) if not $ENV{GL_LOGFILE};
