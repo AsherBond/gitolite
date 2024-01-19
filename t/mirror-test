@@ -91,7 +91,7 @@ try "
     git add keydir;                     ok
     git commit -m 6keys;                ok
     git push;                           ok
-        /To frodo\@localhost:gitolite-admin/
+        /To localhost:gitolite-admin/
         /master -> master/
     sleep 5
     git rev-parse HEAD
@@ -118,7 +118,7 @@ try "
     cd sga;                             ok
     empty;                              ok
     git push;                           ok
-        /To sam\@localhost:gitolite-admin/
+        /To localhost:gitolite-admin/
         /master -> master/
     sleep 5
     git rev-parse HEAD
@@ -145,9 +145,9 @@ try "
     cd gga;                             ok
     empty;                              ok
     git push;                           !ok
-        !/To gollum\@localhost:gitolite-admin/
+        !/To localhost:gitolite-admin/
         !/master -> master/
-        /gollum: pushing 'gitolite-admin' to slave 'gollum' not allowed/
+        /gollum: pushing 'gitolite-admin' to copy 'gollum' not allowed/
     git rev-parse HEAD
 ";
 
@@ -193,7 +193,7 @@ try "
     cd fga;                             ok
     empty;                              ok
     git push;                           ok
-        /To frodo\@localhost:gitolite-admin/
+        /To localhost:gitolite-admin/
         /master -> master/
     sleep 5
 
@@ -290,7 +290,7 @@ try "
     cd fr1
     empty
     git push
-        /frodo: pushing 'r1' to slave 'frodo' not allowed/
+        /frodo: pushing 'r1' to copy 'frodo' not allowed/
     cd ..
     git clone sam\@localhost:r1 sr1;         ok
     cd sr1
@@ -335,7 +335,7 @@ try "
     cd fr1
     tc b
     git push
-        /frodo: pushing 'r1' to slave 'frodo' not allowed/
+        /frodo: pushing 'r1' to copy 'frodo' not allowed/
     cd ..
     git clone frodo\@localhost:r2 fr2;       ok
     cd fr2
@@ -441,5 +441,5 @@ try "
     cd nvsfrodo
     empty
     git push origin master;                     !ok
-    /FATAL: frodo: 'sam' is not a valid slave for 'nvsfrodo'/
+    /FATAL: frodo: 'sam' is not a valid copy for 'nvsfrodo'/
 ";

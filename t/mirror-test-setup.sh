@@ -6,6 +6,7 @@ mainhost=frodo
 
 # setup software
 bd=`gitolite query-rc -n GL_BINDIR`
+mkdir -p /tmp/g3
 rm -rf /tmp/g3/src
 cp -a $bd /tmp/g3/src
 chmod -R go+rX /tmp/g3
@@ -29,6 +30,7 @@ cd /tmp/g3
     done
     cp $bd/../t/mirror-test-ssh-config ssh-config
 }
+chmod -R go+rX /tmp/g3
 
 for h in $hosts
 do
@@ -64,7 +66,7 @@ ssh $mainhost@localhost info
 lines="
 repo gitolite-admin
     option mirror.master = frodo
-    option mirror.slaves-1 = sam gollum
+    option mirror.copies-1 = sam gollum
     option mirror.redirectOK = sam
 
 repo r1
@@ -72,14 +74,14 @@ repo r1
     RW      =   u2
     R       =   u3
     option mirror.master = sam
-    option mirror.slaves-1 = frodo
+    option mirror.copies-1 = frodo
 
 repo r2
     RW+     =   u2
     RW      =   u3
     R       =   u4
     option mirror.master = sam
-    option mirror.slaves-1 = frodo gollum
+    option mirror.copies-1 = frodo gollum
     option mirror.redirectOK = all
 
 include \"%HOSTNAME.conf\"
@@ -95,6 +97,7 @@ RW  =   u1
 for h in $hosts
 do
     cat $bd/../t/mirror-test-rc | perl -pe "s/%HOSTNAME/$h/" > /tmp/g3/temp
+    chmod go+rX /tmp/g3/temp
     sudo -u $h -i cp /tmp/g3/temp .gitolite.rc
     echo "$lines"  | sudo -u $h -i sh -c 'cat >> .gitolite/conf/gitolite.conf'
     echo "$lines2" | sudo -u $h -i sh -c "cat >> .gitolite/conf/$h.conf"
@@ -103,7 +106,7 @@ done
 
 # goes on frodo
 lines="
-# local to frodo but sam thinks frodo is a slave
+# local to frodo but sam thinks frodo is a copy
 repo lfrodo
 RW  =   u1
 
@@ -111,13 +114,13 @@ RW  =   u1
 repo mboth
 RW  =   u1
 option mirror.master = frodo
-option mirror.slaves = sam
+option mirror.copies = sam
 
 # frodo thinks someone else is the master but sam thinks he is
 repo mnotsam
 RW  =   u1
 option mirror.master = merry
-option mirror.slaves = frodo
+option mirror.copies = frodo
 
 # local to frodo but sam thinks frodo is a master and redirect is OK
 repo lfrodo2
@@ -127,14 +130,14 @@ RW  =   u1
 repo nnfrodo
 RW  =   u1
 option mirror.master = gollum
-option mirror.slaves = frodo
+option mirror.copies = frodo
 option mirror.redirectOK = all
 
-# sam is not a valid slave to send stuff to frodo
+# sam is not a valid copy to send stuff to frodo
 repo nvsfrodo
 RW  =   u1
 option mirror.master = frodo
-option mirror.slaves = gollum
+option mirror.copies = gollum
 option mirror.redirectOK = all
 "
 
@@ -142,43 +145,43 @@ echo "$lines" | sudo -u frodo -i sh -c "cat >> .gitolite/conf/frodo.conf"
 
 # goes on sam
 lines="
-# local to frodo but sam thinks frodo is a slave
+# local to frodo but sam thinks frodo is a copy
 repo lfrodo
 RW  =   u1
 option mirror.master = sam
-option mirror.slaves = frodo
+option mirror.copies = frodo
 
 # both think they're master
 repo mboth
 RW  =   u1
 option mirror.master = sam
-option mirror.slaves = frodo
+option mirror.copies = frodo
 
 # frodo thinks someone else is the master but sam thinks he is
 repo mnotsam
 RW  =   u1
 option mirror.master = sam
-option mirror.slaves = frodo
+option mirror.copies = frodo
 
 # local to frodo but sam thinks frodo is a master and redirect is OK
 repo lfrodo2
 RW  =   u1
 option mirror.master = frodo
-option mirror.slaves = sam
+option mirror.copies = sam
 option mirror.redirectOK = all
 
 # non-native to frodo but sam thinks frodo is master
 repo nnfrodo
 RW  =   u1
 option mirror.master = frodo
-option mirror.slaves = sam
+option mirror.copies = sam
 option mirror.redirectOK = all
 
-# sam is not a valid slave to send stuff to frodo
+# sam is not a valid copy to send stuff to frodo
 repo nvsfrodo
 RW  =   u1
 option mirror.master = frodo
-option mirror.slaves = sam
+option mirror.copies = sam
 option mirror.redirectOK = all
 "
 

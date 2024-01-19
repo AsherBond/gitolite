@@ -47,9 +47,19 @@ sub compile {
         cache_control('start');
     }
 
+    # remove entries from POST_CREATE which also exist in POST_COMPILE.  This
+    # not only saves us having to implement an optimisation in *those*
+    # scripts, but more importantly, moves the optimisation one step up -- we
+    # don't even *call* those scripts now.
+    my %pco = map { $_ => 1 } @{ $rc{POST_COMPILE} };
+    @{ $rc{POST_CREATE} } = grep { ! exists $pco{$_} } @{ $rc{POST_CREATE} };
+
     for my $repo ( @{ $rc{NEW_REPOS_CREATED} } ) {
         trigger( 'POST_CREATE', $repo );
     }
+
+    # process rule template data
+    _system("gitolite compile-template-data");
 }
 
 sub parse {

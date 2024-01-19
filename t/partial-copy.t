@@ -90,20 +90,20 @@ try "
     tc u4n1 u4n2
     PUSH u4 next; ok
         /To .*/foo.git/
-        /new branch\\]      ca3787119b7e8b9914bc22c939cefc443bc308da -> refs/partial/br-\\d+/
+        /new reference\\]   ca3787119b7e8b9914bc22c939cefc443bc308da -> refs/partial/br-\\d+/
         /file:///foo-pc/
         /52c7716..ca37871  next -> next/
     tag u4/nexttag; glt push u4 --tags
         /To file:///foo-pc/
-        /\\[new tag\\]         u4/nexttag -> u4/nexttag/
-        /\\[new branch\\]      ca3787119b7e8b9914bc22c939cefc443bc308da -> refs/partial/br-\\d+/
+        /\\[new tag\\]         u4/nexttag +-> +u4/nexttag/
+        /\\[new reference\\]   ca3787119b7e8b9914bc22c939cefc443bc308da -> refs/partial/br-\\d+/
 
     checkout master
     checkout -b dev/u4/u4master
     tc devu4m1 devu4m2
     PUSH u4 HEAD; ok
         /To .*/foo.git/
-        /new branch\\]      228353950557ed1eb13679c1fce4d2b4718a2060 -> refs/partial/br-\\d+/
+        /new reference\\]   228353950557ed1eb13679c1fce4d2b4718a2060 -> refs/partial/br-\\d+/
         /file:///foo-pc/
         /new branch.* HEAD -> dev/u4/u4master/
 
@@ -112,8 +112,8 @@ try "
     glt fetch u1
         /From file:///foo/
         /new branch\\]      dev/u4/u4master -> origin/dev/u4/u4master/
-        /new tag\\]         u4/nexttag -> u4/nexttag/
-        /52c7716..ca37871  next       -> origin/next/
+        /new tag\\]         u4/nexttag +-> +u4/nexttag/
+        /52c7716..ca37871  next +-> +origin/next/
     checkout master; tc u1ma1 u1ma2;
         /\\[master 8ab1ff5\\] u1ma2 at Thu Jul  7 06:23:20 2011/
     tag mt2; PUSH u1 master; ok

@@ -198,10 +198,13 @@ sub new_repos {
         next unless $repo =~ $REPONAME_PATT;    # skip repo patterns
         next if $repo =~ m(^\@|EXTCMD/);        # skip groups and fake repos
 
-        # use gl-conf as a sentinel
-        hook_1($repo) if -d "$repo.git" and not -f "$repo.git/gl-conf";
+        # use gl-conf as a sentinel; if it exists, all is well
+        next if -f "$repo.git/gl-conf";
 
-        if ( not -d "$repo.git" ) {
+        if (-d "$repo.git") {
+            # directory exists but sentinel missing?  Maybe a freshly imported repo?
+            hook_1($repo);
+        } else {
             push @{ $rc{NEW_REPOS_CREATED} }, $repo;
             trigger( 'PRE_CREATE', $repo );
             new_repo($repo);
@@ -216,6 +219,7 @@ sub new_repo {
     _mkdir("$repo.git");
     _chdir("$repo.git");
     _system("git init --bare >&2");
+    unlink "description";
     _chdir( $rc{GL_REPO_BASE} );
     hook_1($repo);
 }
@@ -234,13 +238,12 @@ sub new_wild_repo {
 
 sub hook_repos {
     trace(3);
+
     # all repos, all hooks
     _chdir( $rc{GL_REPO_BASE} );
+    my $phy_repos = list_phy_repos(1);
 
-    for my $repo (`find . -name "*.git" -prune`) {
-        chomp($repo);
-        $repo =~ s/\.git$//;
-        $repo =~ s(^\./)();
+    for my $repo ( @{$phy_repos} ) {
         hook_1($repo);
     }
 }
@@ -250,9 +253,12 @@ sub store {
 
     # first write out the ones for the physical repos
     _chdir( $rc{GL_REPO_BASE} );
-    my $phy_repos = list_phy_repos(1);
 
-    for my $repo ( @{$phy_repos} ) {
+    # list of repos (union of keys of %repos plus %configs)
+    my %kr_kc;
+    @kr_kc{ keys %repos } = ();
+    @kr_kc{ keys %configs } = ();
+    for my $repo ( keys %kr_kc ) {
         store_1($repo);
     }
 
@@ -295,11 +301,9 @@ sub store_1 {
     # warning: writes and *deletes* it from %repos and %configs
     my ($repo) = shift;
     trace( 3, $repo );
-    return unless ( $repos{$repo} or $configs{$repo} ) and -d "$repo.git";
+    return unless -d "$repo.git";
 
     my ( %one_repo, %one_config );
-
-    open( my $compiled_fh, ">", "$repo.git/gl-conf" ) or return;
 
     my $dumped_data = '';
     if ( $repos{$repo} ) {
@@ -314,8 +318,7 @@ sub store_1 {
         $dumped_data .= Data::Dumper->Dump( [ \%one_config ], [qw(*one_config)] );
     }
 
-    print $compiled_fh $dumped_data;
-    close $compiled_fh;
+    _print( "$repo.git/gl-conf", $dumped_data );
 
     $split_conf{$repo} = 1;
 }

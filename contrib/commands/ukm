@@ -10,8 +10,8 @@ use Gitolite::Easy;
 =for usage
 Usage for this command is not that simple. Please read the full
 documentation in
-https://github.com/sitaramc/gitolite-doc/blob/master/contrib/ukm.mkd
-or online at http://gitolite.com/gitolite/ukm.html.
+https://github.com/sitaramc/gitolite-doc/blob/master/docs/contrib/ukm.mkd
+or online at http://gitolite.com/gitolite/contrib/ukm.html.
 =cut
 
 usage() if @ARGV and $ARGV[0] eq '-h';
@@ -220,10 +220,10 @@ sub cd_temp_clone {
 
 # compute the fingerprint from the full path of a pubkey file
 sub fingerprint {
-    my $fp = `ssh-keygen -l -f $_[0]`;
-    die "does not seem to be a valid pubkey\n"
-        unless $fp =~ /(([0-9a-f]+:)+[0-9a-f]+) /i;
-    return $1;
+    my ($fp, $output) = ssh_fingerprint_file(shift);
+    # Do not print the output of $output to an untrusted destination.
+    die "does not seem to be a valid pubkey\n" unless $fp;
+    return $fp;
 }
 
 
@@ -293,7 +293,7 @@ sub sanitize_pubkeypath {
 # This function is only relavant for guest key managers.
 # It returns true if the pattern is OK and false otherwise.
 sub required_guest_keyid {
-    my ($_) = @_;
+    local ($_) = @_;
     /$required_guest_pattern/ and ! /$forbidden_guest_pattern/;
 }
 

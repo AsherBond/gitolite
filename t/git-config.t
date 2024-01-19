@@ -64,7 +64,7 @@ try "ADMIN_PUSH set1; !/FATAL/" or die text();
 my $rb = `gitolite query-rc -n GL_REPO_BASE`;
 try "
     cd $rb;                             ok
-    egrep foo\\|bar *.git/config
+    grep -E foo\\|bar *.git/config
 ";
 $t = join("\n", sort (lines()));
 
@@ -100,7 +100,7 @@ try "ADMIN_PUSH set1; !/FATAL/" or die text();
 
 try "
     cd $rb;                             ok
-    egrep foo\\|bar *.git/config
+    grep -E foo\\|bar *.git/config
 ";
 $t = join("\n", sort (lines()));
 
@@ -132,12 +132,11 @@ try "ADMIN_PUSH set1; !/FATAL/" or die text();
 
 try "
     cd $rb;                             ok
-    egrep foo\\|bar *.git/config
+    grep -E foo\\|bar *.git/config
 ";
 $t = join("\n", sort (lines()));
 
 cmp $t, 'bar.git/config:	bare = true
-bar.git/config:[foo]
 foo.git/config:	bar = f1
 foo.git/config:	bare = true
 foo.git/config:[foo]
@@ -173,7 +172,7 @@ try "
 
 try "
     cd $rb;                             ok
-    find . -name config | xargs egrep foo\\|bar
+    find . -name config | xargs grep -E foo\\|bar
 ";
 $t = join("\n", sort (lines()));
 

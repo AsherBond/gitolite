@@ -7,6 +7,7 @@ use warnings;
 
 use Getopt::Long;
 use FindBin;
+use Config;
 
 # meant to be run from the root of the gitolite tree, one level above 'src'
 BEGIN { $ENV{GL_BINDIR} = $FindBin::RealBin . "/src"; }
@@ -34,9 +35,15 @@ Usage (from gitolite clone directory):
 
         Please provide a full path, not a relative path.
 
+    <perl-executable> ./install -to <dir>
+        to copy the entire 'src' directory to <dir>, but will replace
+        all of the shebangs with the path to <perl-executable>.  This
+        is a way to force gitolite to use some perl that is not
+        installed at /usr/bin/perl.
+
 Simplest use, if $HOME/bin exists and is in $PATH, is:
 
-    git clone git://github.com/sitaramc/gitolite
+    git clone https://github.com/sitaramc/gitolite
     gitolite/install -ln
 
     # now run setup
@@ -54,7 +61,12 @@ GetOptions(
 usage() if $to and $ln or $help;
 $ln = "$ENV{HOME}/bin" if defined($ln) and not $ln;
 for my $d ($ln, $to) {
-    if ($d and not -d $d) {
+    next unless $d;    # ignore empty values
+    unless ( $d =~ m(^/) ) {
+        print STDERR "FATAL: please use an absolute path, not a relative path\n";
+        usage();
+    }
+    if ( not -d $d ) {
         print STDERR "FATAL: '$d' does not exist.\n";
         usage();
     }
@@ -71,6 +83,12 @@ if ($to) {
     _mkdir($to);
     system("cp -RpP * $to");
     _print( "$to/VERSION", $version );
+
+    # Replace shebangs if necessary.
+    my $thisperl = $Config{perlpath};
+    if ($thisperl ne '/usr/bin/perl') {
+        system("cd $to; grep -r -l /usr/bin/perl | xargs perl -pi -e 's(^#!/usr/bin/perl)(#!$thisperl)'");
+    }
 } elsif ($ln) {
     ln_sf( $ENV{GL_BINDIR}, "gitolite", $ln );
     _print( "VERSION", $version );

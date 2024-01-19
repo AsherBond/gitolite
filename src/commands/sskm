@@ -8,7 +8,7 @@ use Gitolite::Common;
 
 =for usage
 Usage for this command is not that simple.  Please read the full documentation
-in doc/sskm.mkd or online at http://gitolite.com/gitolite/sskm.html.
+in doc/sskm.mkd or online at http://gitolite.com/gitolite/contrib/sskm.html.
 =cut
 
 usage() if @ARGV and $ARGV[0] eq '-h';
@@ -137,9 +137,10 @@ sub cd_temp_clone {
 }
 
 sub fingerprint {
-    my $fp = `ssh-keygen -l -f $_[0]`;
-    die "does not seem to be a valid pubkey\n" unless $fp =~ /(([0-9a-f]+:)+[0-9a-f]+ )/i;
-    return $1;
+    my ($fp, $output) = ssh_fingerprint_file(shift);
+    # Do not print the output of $output to an untrusted destination.
+    die "does not seem to be a valid pubkey\n" unless $fp;
+    return $fp;
 }
 
 sub safe_stdin {

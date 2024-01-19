@@ -68,6 +68,7 @@ sub sugar {
     $lines = owner_desc($lines);
     $lines = name_vref($lines);
     $lines = role_names($lines);
+    $lines = skip_block($lines);
 
     return $lines;
 }
@@ -104,6 +105,7 @@ sub option {
     #   ->  config gitolite-options.foo = bar
 
     for my $line (@$lines) {
+        $line =~ s/option mirror\.slaves/option mirror.copies/;
         if ( $line =~ /^option (\S+) = (\S.*)/ ) {
             push @ret, "config gitolite-options.$1 = $2";
         } else {
@@ -177,6 +179,23 @@ sub role_names {
         }
     }
     return \@ret;
+}
+
+sub skip_block {
+    my $lines = shift;
+
+    my @out  = ();
+    for (@$lines) {
+        my $skip = 0;
+        $skip = 1 if /^= *begin testconf$/;
+        $skip = 1 if /^= *begin template-data$/;
+        # add code for other types of blocks here as needed
+
+        next if $skip .. /^= *end$/;
+        push @out, $_;
+    }
+
+    return \@out;
 }
 
 1;

@@ -36,9 +36,12 @@ Notes:
 
   - '-s' shows the rules (conf file name, line number, and rule) that were
     considered and how they fared.
+
+  - you can also test the ability to create wild repos if you set GL_USER to
+    the username and use ^C as the permission to check for.
 =cut
 
-usage() if not @ARGV or $h;
+usage() if not @ARGV >= 2 or $h;
 
 my ( $repo, $user, $aa, $ref ) = @ARGV;
 # default access is '+'
@@ -48,15 +51,18 @@ $ref ||= 'any';
 # fq the ref if needed
 $ref =~ s(^)(refs/heads/) if $ref and $ref ne 'any' and $ref !~ m(^(refs|VREF)/);
 _die "invalid perm" if not( $aa and $aa =~ /^(R|W|\+|C|D|M|\^C)$/ );
-_die "invalid ref name" if not( $ref and $ref =~ $REPONAME_PATT );
+_die "invalid ref name" if not( $ref and $ref =~ $REF_OR_FILENAME_PATT );
 
 my $ret = '';
 
 if ( $repo ne '%' and $user ne '%' ) {
     # single repo, single user; no STDIN
-    $ret = access( $repo, $user, $aa, $ref );
+    $ret = access( $repo, $user, adjust_aa($repo, $aa), $ref );
 
-    show() if $s;
+    show($ret) if $s;
+
+    # adjust for fallthru in VREFs
+    $ret =~ s/DENIED by fallthru/allowed by fallthru/ if $ref =~ m(^VREF/);
 
     if ( $ret =~ /DENIED/ ) {
         print "$ret\n" unless $q;
@@ -76,12 +82,23 @@ while (<>) {
     my @in = split;
     my $r  = $repo || shift @in;
     my $u  = $user || shift @in;
-    $ret = access( $r, $u, $aa, $ref );
+    $ret = access( $r, $u, adjust_aa($r, $aa), $ref );
     print "$r\t$u\t$ret\n";
 }
 
+sub adjust_aa {
+    my ($repo, $aa) = @_;
+    $aa = 'W' if $aa eq 'C' and not option($repo, 'CREATE_IS_C');
+    $aa = '+' if $aa eq 'D' and not option($repo, 'DELETE_IS_D');
+    $aa = 'W' if $aa eq 'M' and not option($repo, 'MERGE_CHECK');
+    return $aa;
+}
+
 sub show {
-    my $in = $rc{RULE_TRACE} or die "this should not happen!";
+    my $ret = shift;
+    die "repo already exists; ^C won't work\n" if $ret =~ /DENIED by existence/;
+
+    my $in = $rc{RULE_TRACE} or die "this should not happen! $ret";
 
     print STDERR "legend:";
     print STDERR "
@@ -90,7 +107,7 @@ sub show {
     p => skipped due to perm (W, +, etc) not matching,
     D => explicitly denied,
     A => explicitly allowed,
-    F => denied due to fallthru (no rules matched)
+    F => fallthru; access denied for normal refs, allowed for VREFs
 
 ";
 

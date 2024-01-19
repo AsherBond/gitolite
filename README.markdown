@@ -7,14 +7,14 @@ Gitolite README
 
 **This is a minimal README for gitolite**, so you can quickly get started with:
 
-*   installing gitolite on a fresh userid on a Unix(-like) machine
+*   installing gitolite on a fresh userid on a Unix(-like) machine, using ssh
 *   learning enough to do some basic access control
 
 **For anything more, you need to look at the complete documentation, at:
 <http://gitolite.com/gitolite>**.  Please go there for what/why/how, concepts,
 background, troubleshooting, more details on what is covered here, advanced
-features not covered here, migration from older gitolite, and many more
-topics.
+features not covered here, migration from older gitolite, running gitolite
+over http (rather than ssh), and many more topics.
 
 <!-- --------------------------------------------------------------------- -->
 
@@ -65,7 +65,7 @@ First, prepare the ssh key:
 
 Next, install gitolite by running these commands:
 
-    git clone git://github.com/sitaramc/gitolite
+    git clone https://github.com/sitaramc/gitolite
     mkdir -p $HOME/bin
     gitolite/install -to $HOME/bin
 
@@ -73,7 +73,7 @@ Finally, setup gitolite with yourself as the administrator:
 
     gitolite setup -pk YourName.pub
 
-If the last command doesn't run perhaps "bin" in not in your "PATH". You can
+If the last command doesn't run perhaps "bin" is not in your "PATH". You can
 either add it, or just run:
 
     $HOME/bin/gitolite setup -pk YourName.pub
@@ -213,10 +213,10 @@ you; try running "gitolite help".
 
 # contact and support
 
-Please see <http://gitolite.com/gitolite/#contact> for mailing list and IRC
+Please see <http://gitolite.com/gitolite/#contactsupport> for mailing list and IRC
 info.
 
-# license {#license -}
+# license
 
 The gitolite software is copyright Sitaram Chamarty and is licensed under the
 GPL v2; please see the file called COPYING in the source distribution.

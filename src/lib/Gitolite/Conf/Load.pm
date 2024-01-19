@@ -73,6 +73,7 @@ sub access {
     trace( 2, $repo, $user, $aa, $ref );
     _die "invalid user '$user'" if not( $user and $user =~ $USERNAME_PATT );
     sanity($repo);
+    return "$aa any $repo $user DENIED by fallthru" unless update_hook_present($repo);
 
     my @rules;
     my $deny_rules;
@@ -123,9 +124,21 @@ sub access {
         trace( 2, "DENIED by $refex" ) if $perm eq '-';
         return "$aa $safe_ref $repo $user DENIED by $refex" if $perm eq '-';
 
-        # $perm can be RW\+?(C|D|CD|DC)?M?.  $aa can be W, +, C or D, or
-        # any of these followed by "M".
+        # For repo creation, perm will be C and aa will be "^C".  For branch
+        # access, $perm can be RW\+?(C|D|CD|DC)?M?, and $aa can be W, +, C or
+        # D, or any of these followed by "M".
+
+        # We need to turn $aa into a regex that can match a suitable $perm.
+        # This is trivially true for "^C", "W" and "D", but the others (+, C,
+        # M) need some tweaking.
+
+        # first, quote the '+':
         ( my $aaq = $aa ) =~ s/\+/\\+/;
+        # if aa is just "C", the user is trying to create a *branch* (not a
+        # *repo*), so let's make the pattern clearer to reflect that.
+        $aaq = "RW.*C" if $aaq eq "C";
+        # if the aa is, say "WM", make this "W.*M" because the perm could be
+        # 'RW+M', 'RW+CDM' etc, and they are all valid:
         $aaq =~ s/M/.*M/;
 
         $rc{RULE_TRACE} .= "A";
@@ -233,11 +246,14 @@ sub option {
 }
 
 sub sanity {
-    my $repo = shift;
+    my ($repo, $patt) = @_;
+    $patt ||= $REPOPATT_PATT;
 
-    _die "invalid repo '$repo'" if not( $repo and $repo =~ $REPOPATT_PATT );
-    _die "'$repo' ends with a '/'" if $repo =~ m(/$);
-    _die "'$repo' contains '..'" if $repo =~ $REPONAME_PATT and $repo =~ m(\.\.);
+    _die "invalid repo '$repo'" if not( $repo and $repo =~ $patt );
+    _die "'$repo' ends with a '/'"  if $repo =~ m(/$);
+    _die "'$repo' contains '..'"    if $repo =~ $REPONAME_PATT and $repo =~ m(\.\.);
+    _die "'$repo' contains '.git/'" if $repo =~ $REPONAME_PATT and $repo =~ m(\.git/);
+    _die "'$repo' ends with '.git'" if $repo =~ m(\.git$);
 }
 
 sub repo_missing {
@@ -261,7 +277,7 @@ sub load_common {
         return;
     }
 
-    my $cc = "conf/gitolite.conf-compiled.pm";
+    my $cc = "./conf/gitolite.conf-compiled.pm";
 
     _die "parse '$cc' failed: " . ( $! or $@ ) unless do $cc;
 
@@ -290,10 +306,10 @@ sub load_1 {
     }
 
     if ( -f "gl-conf" ) {
-        return if not $split_conf{$repo};
+        return if not $split_conf{$repo} and not $rc{ALLOW_ORPHAN_GL_CONF};
 
         my $cc = "./gl-conf";
-        _die "parse '$cc' failed: " . ( $! or $@ ) unless do $cc;
+        _die "parse '$cc' failed: " . ( $@ or $! ) unless do $cc;
 
         $last_repo = $repo;
         $repos{$repo} = $one_repo{$repo};
@@ -369,13 +385,23 @@ sub memberships {
                 push @ret, $i;
             }
         }
+
+        # add in any group names explicitly given in (GIT_DIR)/gl-repo-groups
+        push @ret,
+            map { s/^\@?/\@/; $_ }
+            grep { ! /[^\w@-]/ }
+            split (' ', slurp("$ENV{GL_REPO_BASE}/$base.git/gl-repo-groups"))
+                if -f         "$ENV{GL_REPO_BASE}/$base.git/gl-repo-groups";
     }
 
     push @ret, @{ $groups{$base} } if exists $groups{$base};
     push @ret, @{ $groups{$base2} } if $base2 and exists $groups{$base2};
-    for my $i ( keys %{ $patterns{groups} } ) {
-        if ( $base =~ /^$i$/ or $base2 and ( $base2 =~ /^$i$/ ) ) {
-            push @ret, @{ $groups{$i} };
+    if ($type eq 'repo') {
+        # regexes can only be used for repos, not for users
+        for my $i ( keys %{ $patterns{groups} } ) {
+            if ( $base =~ /^$i$/ or $base2 and ( $base2 =~ /^$i$/ ) ) {
+                push @ret, @{ $groups{$i} };
+            }
         }
     }
 
@@ -528,15 +554,24 @@ sub list_groups {
 =for list_users
 Usage:  gitolite list-users [<repo name pattern>]
 
-List all users and groups explicitly named in a rule.  User names not
-mentioned in an access rule will not show up; you have to run 'list-members'
-on each group name yourself to see them.
+List all users and groups explicitly named in a rule.
+
+-   you will have to run 'list-members' on each group name to expand it -- for
+    details and caveats on that please see its help message.
+-   User names not mentioned in an access rule will not show up at all (for
+    example, if you have users who only have access via an '@all' rule).
 
 WARNING: may be slow if you have thousands of repos.  The optional repo name
 pattern is an unanchored regex; it can speed things up if you're interested
 only in users of a matching set of repos.  This is only an optimisation, not
 an actual access list; you will still have to pipe it to 'gitolite access'
 with appropriate arguments to get an actual access list.
+
+NOTE: If you're running in ssh mode, it may be simpler to parse the authorized
+keys file in ~/.ssh, like so:
+    perl -lne '/ ([a-z0-9]+)"/; print $1 if $1' < ~/.ssh/authorized_keys | sort -u
+If you're running in http mode, only your web server knows all the potential
+user names.
 =cut
 
 sub list_users {
@@ -622,6 +657,13 @@ Usage:  gitolite list-members <group name>
 
   - list all members of a group
   - takes one group name
+
+'@all' is not expandable in this context.  Also, if you have GROUPLIST_PGM set
+in your rc file[1], gitolite cannot expand group names completely; only your
+external database can.
+
+[1]: http://gitolite.com/gitolite/conf.html#getting-user-group-info-from-ldap
+
 =cut
 
 sub list_members {

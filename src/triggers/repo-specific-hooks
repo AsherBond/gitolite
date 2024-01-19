@@ -13,9 +13,15 @@ _die "repo-specific-hooks: '$rc{LOCAL_CODE}/hooks/repo-specific' does not exist 
 
 _chdir( $ENV{GL_REPO_BASE} );
 
-@ARGV = ("gitolite list-phy-repos | gitolite git-config -ev -r % gitolite-options\\.hook\\. |");
+if ($ARGV[0] eq 'POST_CREATE') {
+    # just the repo given in arg-2
+    @ARGV = ("gitolite git-config -ev -r $ARGV[1] gitolite-options\\.hook\\. |");
+} else {
+    # POST_COMPILE, all repos
+    @ARGV = ("gitolite list-phy-repos | gitolite git-config -ev -r % gitolite-options\\.hook\\. |");
+}
 
-my $driver = "$rc{LOCAL_CODE}/hooks/multi-hook-driver";
+my $driver = $rc{MULTI_HOOK_DRIVER} || "$rc{LOCAL_CODE}/hooks/multi-hook-driver";
 # Hook Driver
 {
     local $/ = undef;
@@ -24,57 +30,73 @@ my $driver = "$rc{LOCAL_CODE}/hooks/multi-hook-driver";
     chmod 0755, $driver;
 }
 
+my %repo_hooks;
 while (<>) {
     chomp;
     my ( $repo, $hook, $codes ) = split /\t/, $_;
     $codes ||= '';
 
-    # we don't allow fiddling with the admin repo
-    if ( $repo eq 'gitolite-admin' ) {
-        _warn "repo-specific-hooks: ignoring attempts to set hooks for the admin repo";
-        next;
-    }
-
     # get the hook name
     $hook =~ s/^gitolite-options\.hook\.//;
-
-    unless ( $hook =~ /^(pre-receive|post-receive|post-update)$/ ) {
-        _warn "repo-specific-hooks: '$hook' is not allowed, ignoring";
-        _warn "    (only pre-receive, post-receive, and post-update are allowed)";
-        next;
-    }
+    $hook =~ s/\..*//;
 
     my @codes = split /\s+/, $codes;
 
-    my $dst = "$repo.git/hooks/$hook";
-    unlink( glob("$dst.*") );
-
-    my $counter = "h00";
-    foreach my $code (@codes) {
-        if ( $code =~ m(^/|\.\.) ) {
-            _warn "repo-specific-hooks: double dot or leading slash not allowed in '$code'";
-            next;
+    # bail on disallowed hook types (but warn only if @codes is non-empty)
+    if ( $repo eq 'gitolite-admin' and $hook eq 'post-update' ) {
+        _warn "repo-specific-hooks: ignoring attempts to set post-update hook for the admin repo" if @codes;
+        next;
+    }
+    unless ( $hook =~ /^(pre-receive|post-receive|post-update|pre-auto-gc)$/ ) {
+        if (@codes) {
+            _warn "repo-specific-hooks: '$hook' is not allowed, ignoring";
+            _warn "    (only pre-receive, post-receive, post-update, and pre-auto-gc are allowed)";
         }
-
-        my $src = $rc{LOCAL_CODE} . "/hooks/repo-specific/$code";
-        my $dst = "$repo.git/hooks/$hook.$counter-$code";
-        unless ( -x $src ) {
-            _warn "repo-specific-hooks: '$src' doesn't exist or is not executable";
-            next;
-        }
-        unlink $dst;
-        symlink $src, $dst or _warn "could not symlink '$src' to '$dst'";
-        $counter++;
-
-        # no sanity checks for multiple overwrites of the same hook
+        next;
     }
 
-    unlink $dst;
-    symlink $driver, $dst or die "could not symlink '$driver' to '$dst'";
+    push @{ $repo_hooks{$repo}{$hook} }, @codes;
+}
+
+for my $repo (keys %repo_hooks) {
+    for my $hook (keys %{ $repo_hooks{$repo} }) {
+        my @codes = @{ $repo_hooks{$repo}{$hook} };
+
+        my $dst = "$repo.git/hooks/$hook";
+        unlink( glob("$dst.*") );
+
+        my $counter = "h00";
+        foreach my $code (@codes) {
+            if ( $code =~ m(^/|\.\.) ) {
+                _warn "repo-specific-hooks: double dot or leading slash not allowed in '$code'";
+                next;
+            }
+
+            my $src = $rc{LOCAL_CODE} . "/hooks/repo-specific/$code";
+
+            # if $code has slashes in it, flatten it for use in $dst, to avoid
+            # having to re-create those intermediate sub-directories
+            $code =~ s(/)(_)g;
+            my $dst = "$repo.git/hooks/$hook.$counter-$code";
+
+            unless ( -x $src ) {
+                _warn "repo-specific-hooks: '$src' doesn't exist or is not executable";
+                next;
+            }
+            unlink $dst;
+            symlink $src, $dst or _warn "could not symlink '$src' to '$dst'";
+            $counter++;
+
+            # no sanity checks for multiple overwrites of the same hook
+        }
+
+        unlink $dst;
+        symlink $driver, $dst or die "could not symlink '$driver' to '$dst'";
+    }
 }
 
 __DATA__
-#/bin/sh
+#!/bin/sh
 
 # Determine what input the hook needs
 # post-update takes args, pre/post-receive take stdin
@@ -89,8 +111,8 @@ for h in $0.*; do
     [ -x $h ] || continue
     if [ $type = args ]
     then
-        $h $@
+        $h $@ || { [ $0 = hooks/pre-receive ] && exit 1; }
     else
-        echo "$stdin" | $h
+        echo "$stdin" | $h || { [ $0 = hooks/pre-receive ] && exit 1; }
     fi
 done
