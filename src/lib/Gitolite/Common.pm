@@ -258,7 +258,7 @@ sub cleanup_conf_line {
 
 # [1]: https://gitolite.com/gitolite/internals.html#what-is-core
 # [2]: https://gitolite.com/gitolite/conf-2.html#appendix-3-embedding-test-code-in-your-conf
-# [3]: https://github.com/sitaramc/gitolite/blob/master/contrib/utils/testconf
+# [3]: https://codeberg.org/sitaramc/gitolite/src/branch/master/contrib/utils/testconf
 sub update_hook_present {
     my $repo = shift;
 
@@ -267,7 +267,7 @@ sub update_hook_present {
     my $repo_hook = "$ENV{GL_REPO_BASE}/$repo.git/hooks/update";
     my $common_hook = "$ENV{GL_ADMIN_BASE}/hooks/common/update";
 
-    if ($^O eq 'msys') {
+    if ($^O eq 'msys' || $^O eq 'cygwin') {
         # No symlinks on Windows.  Please see important note placed just before this function.
         my $repo_update_text = slurp($repo_hook) if -f $repo_hook;
         my $common_update_text = slurp($common_hook) if -f $common_hook;
@@ -417,7 +417,7 @@ sub ssh_fingerprint_line {
 
 # ----------------------------------------------------------------------
 
-# bare-minimum subset of 'Tsh' (see github.com/sitaramc/tsh)
+# bare-minimum subset of 'Tsh' (see codeberg.org/sitaramc/tsh)
 {
     my ( $rc, $text );
     sub tsh_rc   { return $rc   || 0; }
